@@ -153,6 +153,13 @@ if (fs.existsSync(jsRuntimeSwift)) {
     rtContent = rtContent.replace(/return expo\.HostFunctionClosure\(context, call, deallocate\)/g, 'return expo.HostFunctionClosure.create(context, call, deallocate)');
     changed = true;
   }
+  if (rtContent.includes('let nativeConstructor = createFunction(name) { this, arguments in')) {
+    rtContent = rtContent.replace(
+      'let nativeConstructor = createFunction(name) { this, arguments in',
+      'let nativeConstructor = createFunction(name) { (this: JavaScriptValue, arguments: JavaScriptValuesBuffer) in'
+    );
+    changed = true;
+  }
   if (changed) {
     fs.writeFileSync(jsRuntimeSwift, rtContent, 'utf8');
     console.log('Successfully patched JavaScriptRuntime.swift for Swift 6.0.');
@@ -173,6 +180,52 @@ if (fs.existsSync(hostObjHeader)) {
     );
     fs.writeFileSync(hostObjHeader, hoContent, 'utf8');
     console.log('Successfully patched HostObjectCallbacks.h for Swift 6.0.');
+  }
+}
+
+// 9. Patch JavaScriptObject.swift for Swift 6.0 noncopyable delegating initializer bug
+const jsObjectSwift = path.join(nodeModules, 'expo-modules-jsi', 'apple', 'Sources', 'ExpoModulesJSI', 'Runtime', 'Values', 'JavaScriptObject.swift');
+if (fs.existsSync(jsObjectSwift)) {
+  let content = fs.readFileSync(jsObjectSwift, 'utf8');
+  if (content.includes('self.init(runtime, facebook.jsi.Object(runtime.pointee))')) {
+    content = content.replace(
+      'self.init(runtime, facebook.jsi.Object(runtime.pointee))',
+      'self.runtimeHandle = runtime.handle\n    self.pointee = facebook.jsi.Object(runtime.pointee)'
+    );
+    fs.writeFileSync(jsObjectSwift, content, 'utf8');
+    console.log('Successfully patched JavaScriptObject.swift for Swift 6.0.');
+  }
+}
+
+// 10. Patch JavaScriptArray.swift for Swift 6.0 noncopyable delegating initializer bug
+const jsArraySwift = path.join(nodeModules, 'expo-modules-jsi', 'apple', 'Sources', 'ExpoModulesJSI', 'Runtime', 'Values', 'JavaScriptArray.swift');
+if (fs.existsSync(jsArraySwift)) {
+  let content = fs.readFileSync(jsArraySwift, 'utf8');
+  if (content.includes('self.init(runtime, facebook.jsi.Array(runtime.pointee, length))')) {
+    content = content.replace(
+      'self.init(runtime, facebook.jsi.Array(runtime.pointee, length))',
+      'self.runtimeHandle = runtime.handle\n    self.pointee = facebook.jsi.Array(runtime.pointee, length)'
+    );
+    fs.writeFileSync(jsArraySwift, content, 'utf8');
+    console.log('Successfully patched JavaScriptArray.swift for Swift 6.0.');
+  }
+}
+
+// 11. Patch JavaScriptPromise.swift for Swift 6.0 noncopyable delegating initializer bug
+const jsPromiseSwift = path.join(nodeModules, 'expo-modules-jsi', 'apple', 'Sources', 'ExpoModulesJSI', 'Runtime', 'Values', 'JavaScriptPromise.swift');
+if (fs.existsSync(jsPromiseSwift)) {
+  let content = fs.readFileSync(jsPromiseSwift, 'utf8');
+  if (content.includes('try self.init(runtime, JavaScriptObject(runtime, object))')) {
+    content = content.replace(
+      'try self.init(runtime, JavaScriptObject(runtime, object))',
+      `let jsObject = JavaScriptObject(runtime, object)
+    self.scheduler = runtime.scheduler
+    _ = try jsObject.getPropertyAsFunction(.cached(runtime, "then"))
+    longLivedState.object = jsObject.asValue()
+    runtime.longLivedObjects.add(longLivedState)`
+    );
+    fs.writeFileSync(jsPromiseSwift, content, 'utf8');
+    console.log('Successfully patched JavaScriptPromise.swift for Swift 6.0.');
   }
 }
 
