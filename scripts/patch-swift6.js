@@ -73,12 +73,23 @@ if (fs.existsSync(jsErrorSwift)) {
 const jsActorSwift = path.join(nodeModules, 'expo-modules-jsi', 'apple', 'Sources', 'ExpoModulesJSI', 'Runtime', 'JavaScriptActor.swift');
 if (fs.existsSync(jsActorSwift)) {
   let actorContent = fs.readFileSync(jsActorSwift, 'utf8');
-  if (actorContent.includes('unsafeBitCast(runIsolated as IsolatedRunner')) {
+  // Match either original Expo code or previously patched version
+  const oldPattern = /public static func assumeIsolated<T(?:|: ~Copyable)>\(_ operation: @JavaScriptActor \(\) -> T\) -> T \{[\s\S]*?return (?:runner\(operation\)|fn\(\))\s*\}/;
+  if (oldPattern.test(actorContent)) {
     actorContent = actorContent.replace(
-      /typealias IsolatedRunner[\s\S]*?let runner = unsafeBitCast\(runIsolated as IsolatedRunner, to: NonisolatedRunner\.self\)[\s\S]*?return runner\(operation\)/,
-      `typealias NonisolatedFn = () -> T
-    let fn = unsafeBitCast(operation, to: NonisolatedFn.self)
-    return fn()`
+      oldPattern,
+      `public static func assumeIsolated<T>(_ operation: @JavaScriptActor () -> T) -> T {
+    return withoutActuallyEscaping(operation) { escapable in
+      typealias NonisolatedFn = () -> T
+      let fn = unsafeBitCast(escapable, to: NonisolatedFn.self)
+      return fn()
+    }
+  }`
+    );
+    // Also adjust throwing overload generic constraint
+    actorContent = actorContent.replace(
+      'public static func assumeIsolated<T: ~Copyable, E: Error>(',
+      'public static func assumeIsolated<T, E: Error>('
     );
     fs.writeFileSync(jsActorSwift, actorContent, 'utf8');
     console.log('Successfully patched JavaScriptActor.swift for Swift 6.0.');
