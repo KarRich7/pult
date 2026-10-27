@@ -69,4 +69,20 @@ if (fs.existsSync(jsErrorSwift)) {
   }
 }
 
+// 4. Patch JavaScriptActor.swift for Swift 6.0 actor isolation compatibility
+const jsActorSwift = path.join(nodeModules, 'expo-modules-jsi', 'apple', 'Sources', 'ExpoModulesJSI', 'Runtime', 'JavaScriptActor.swift');
+if (fs.existsSync(jsActorSwift)) {
+  let actorContent = fs.readFileSync(jsActorSwift, 'utf8');
+  if (actorContent.includes('unsafeBitCast(runIsolated as IsolatedRunner')) {
+    actorContent = actorContent.replace(
+      /typealias IsolatedRunner[\s\S]*?let runner = unsafeBitCast\(runIsolated as IsolatedRunner, to: NonisolatedRunner\.self\)[\s\S]*?return runner\(operation\)/,
+      `typealias NonisolatedFn = () -> T
+    let fn = unsafeBitCast(operation, to: NonisolatedFn.self)
+    return fn()`
+    );
+    fs.writeFileSync(jsActorSwift, actorContent, 'utf8');
+    console.log('Successfully patched JavaScriptActor.swift for Swift 6.0.');
+  }
+}
+
 console.log('Swift 6.0 compatibility patches applied successfully.');
