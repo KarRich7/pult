@@ -153,10 +153,11 @@ if (fs.existsSync(jsRuntimeSwift)) {
     rtContent = rtContent.replace(/return expo\.HostFunctionClosure\(context, call, deallocate\)/g, 'return expo.HostFunctionClosure.create(context, call, deallocate)');
     changed = true;
   }
-  if (rtContent.includes('let nativeConstructor = createFunction(name) { this, arguments in')) {
+  const constructorPattern = /let nativeConstructor = createFunction\(name\) \{ (?:this, arguments|\(this: (?:consuming )?JavaScriptValue, arguments: (?:consuming )?JavaScriptValuesBuffer\)) in/;
+  if (constructorPattern.test(rtContent) && !rtContent.includes('(this: consuming JavaScriptValue, arguments: consuming JavaScriptValuesBuffer)')) {
     rtContent = rtContent.replace(
-      'let nativeConstructor = createFunction(name) { this, arguments in',
-      'let nativeConstructor = createFunction(name) { (this: JavaScriptValue, arguments: JavaScriptValuesBuffer) in'
+      constructorPattern,
+      'let nativeConstructor = createFunction(name) { (this: consuming JavaScriptValue, arguments: consuming JavaScriptValuesBuffer) in'
     );
     changed = true;
   }
