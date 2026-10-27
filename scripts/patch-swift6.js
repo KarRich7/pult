@@ -102,4 +102,55 @@ if (fs.existsSync(jsActorSwift)) {
   }
 }
 
+// 5. Patch Task+immediate.swift for Swift 6.0 compatibility (no Task.immediate or name: in Task.init)
+const taskImmediateSwift = path.join(nodeModules, 'expo-modules-jsi', 'apple', 'Sources', 'ExpoModulesJSI', 'Extensions', 'Task+immediate.swift');
+if (fs.existsSync(taskImmediateSwift)) {
+  let taskContent = fs.readFileSync(taskImmediateSwift, 'utf8');
+  if (taskContent.includes('Task.immediate(')) {
+    taskContent = taskContent.replace(
+      /if #available[\s\S]*?return Task\(name: name, priority: \.high, operation: operation\)\s*\}/,
+      'return Task(priority: priority ?? .high, operation: operation)'
+    );
+    fs.writeFileSync(taskImmediateSwift, taskContent, 'utf8');
+    console.log('Successfully patched Task+immediate.swift for Swift 6.0.');
+  }
+}
+
+// 6. Patch HostFunctionClosure.h for Swift 6.0 SWIFT_IMMORTAL_REFERENCE factory creation
+const hostFnHeader = path.join(nodeModules, 'expo-modules-jsi', 'apple', 'Sources', 'ExpoModulesJSI-Cxx', 'include', 'HostFunctionClosure.h');
+if (fs.existsSync(hostFnHeader)) {
+  let fnContent = fs.readFileSync(hostFnHeader, 'utf8');
+  if (!fnContent.includes('static inline HostFunctionClosure *create')) {
+    fnContent = fnContent.replace(
+      'explicit HostFunctionClosure(Context context, Closure closure, Deallocator deallocator)',
+      `static inline HostFunctionClosure *create(Context context, Closure closure, Deallocator deallocator) {
+    return new HostFunctionClosure(context, closure, deallocator);
+  }
+
+  explicit HostFunctionClosure(Context context, Closure closure, Deallocator deallocator)`
+    );
+    fs.writeFileSync(hostFnHeader, fnContent, 'utf8');
+    console.log('Successfully patched HostFunctionClosure.h for Swift 6.0.');
+  }
+}
+
+// 7. Patch JavaScriptRuntime.swift for Swift 6.0 compatibility
+const jsRuntimeSwift = path.join(nodeModules, 'expo-modules-jsi', 'apple', 'Sources', 'ExpoModulesJSI', 'Runtime', 'JavaScriptRuntime.swift');
+if (fs.existsSync(jsRuntimeSwift)) {
+  let rtContent = fs.readFileSync(jsRuntimeSwift, 'utf8');
+  let changed = false;
+  if (rtContent.includes('vector.push_back(consuming: propNameId)')) {
+    rtContent = rtContent.replace('vector.push_back(consuming: propNameId)', 'vector.push_back(propNameId)');
+    changed = true;
+  }
+  if (rtContent.includes('return expo.HostFunctionClosure(context, call, deallocate)')) {
+    rtContent = rtContent.replace(/return expo\.HostFunctionClosure\(context, call, deallocate\)/g, 'return expo.HostFunctionClosure.create(context, call, deallocate)');
+    changed = true;
+  }
+  if (changed) {
+    fs.writeFileSync(jsRuntimeSwift, rtContent, 'utf8');
+    console.log('Successfully patched JavaScriptRuntime.swift for Swift 6.0.');
+  }
+}
+
 console.log('Swift 6.0 compatibility patches applied successfully.');
