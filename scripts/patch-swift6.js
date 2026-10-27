@@ -139,8 +139,14 @@ const jsRuntimeSwift = path.join(nodeModules, 'expo-modules-jsi', 'apple', 'Sour
 if (fs.existsSync(jsRuntimeSwift)) {
   let rtContent = fs.readFileSync(jsRuntimeSwift, 'utf8');
   let changed = false;
-  if (rtContent.includes('vector.push_back(consuming: propNameId)')) {
-    rtContent = rtContent.replace('vector.push_back(consuming: propNameId)', 'vector.push_back(propNameId)');
+  const oldLoop = /for propertyName in propertyNames \{[\s\S]*?vector\.push_back\((?:consuming:\s*)?propNameId\)\s*\}/;
+  if (oldLoop.test(rtContent)) {
+    rtContent = rtContent.replace(
+      oldLoop,
+      `for propertyName in propertyNames {
+        expo.HostObjectCallbacks.addPropNameId(&vector, iRuntime, std.string(propertyName))
+      }`
+    );
     changed = true;
   }
   if (rtContent.includes('return expo.HostFunctionClosure(context, call, deallocate)')) {
@@ -150,6 +156,23 @@ if (fs.existsSync(jsRuntimeSwift)) {
   if (changed) {
     fs.writeFileSync(jsRuntimeSwift, rtContent, 'utf8');
     console.log('Successfully patched JavaScriptRuntime.swift for Swift 6.0.');
+  }
+}
+
+// 8. Patch HostObjectCallbacks.h for C++-side PropNameID addition (avoids move-only C++ copy in Swift 6.0)
+const hostObjHeader = path.join(nodeModules, 'expo-modules-jsi', 'apple', 'Sources', 'ExpoModulesJSI-Cxx', 'include', 'HostObjectCallbacks.h');
+if (fs.existsSync(hostObjHeader)) {
+  let hoContent = fs.readFileSync(hostObjHeader, 'utf8');
+  if (!hoContent.includes('static inline void addPropNameId')) {
+    hoContent = hoContent.replace(
+      'using PropNameIds = std::vector<facebook::jsi::PropNameID>;',
+      `using PropNameIds = std::vector<facebook::jsi::PropNameID>;
+  static inline void addPropNameId(PropNameIds &vector, facebook::jsi::IRuntime &runtime, const std::string &name) {
+    vector.push_back(facebook::jsi::PropNameID::forUtf8(runtime, name));
+  }`
+    );
+    fs.writeFileSync(hostObjHeader, hoContent, 'utf8');
+    console.log('Successfully patched HostObjectCallbacks.h for Swift 6.0.');
   }
 }
 
