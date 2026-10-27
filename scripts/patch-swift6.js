@@ -14,7 +14,9 @@ function patchDirectory(dir) {
       content = content.replace(/swift-tools-version:\s*6\.[12]/g, 'swift-tools-version: 6.0');
       // 2. Remove 6.2-only upcoming features
       content = content.replace(/.*enableUpcomingFeature.*\n?/g, '');
-      // 3. Remove trailing commas before closing parenthesis in function calls
+      // 3. Remove 6.2-only -Werror warning group flags
+      content = content.replace(/.*"-Werror",\s*"(ImplicitStrongCapture|NoUsage)".*\n?/g, '');
+      // 4. Remove trailing commas before closing parenthesis in function calls
       content = content.replace(/,\s*\)/g, '\n)');
       if (content !== original) {
         fs.writeFileSync(fullPath, content, 'utf8');
