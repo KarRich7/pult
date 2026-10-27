@@ -22,7 +22,7 @@ concurrency:
 jobs:
   build-ipa:
     name: Build Unsigned IPA
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 45
     permissions:
       contents: write
@@ -45,25 +45,20 @@ jobs:
           echo "Node version: $(node -v)"
           echo "Node path: $(which node)"
 
-      - name: Select Xcode 16 / 15
+      - name: Select Latest Xcode
         run: |
-          if [ -d "/Applications/Xcode_16.2.app" ]; then
-            sudo xcode-select -s /Applications/Xcode_16.2.app
-          elif [ -d "/Applications/Xcode_16.1.app" ]; then
-            sudo xcode-select -s /Applications/Xcode_16.1.app
-          elif [ -d "/Applications/Xcode_16.0.app" ]; then
-            sudo xcode-select -s /Applications/Xcode_16.0.app
-          elif [ -d "/Applications/Xcode_15.4.app" ]; then
-            sudo xcode-select -s /Applications/Xcode_15.4.app
+          echo "=== Available Xcode versions in /Applications ==="
+          ls -ld /Applications/Xcode* || true
+
+          LATEST_XCODE=$(find /Applications -maxdepth 1 -name "Xcode*.app" | sort -V | tail -n 1)
+          if [ -n "$LATEST_XCODE" ]; then
+            echo "Selecting highest Xcode: $LATEST_XCODE"
+            sudo xcode-select -s "$LATEST_XCODE"
           fi
           xcodebuild -version
 
       - name: Install npm dependencies
         run: npm ci
-
-      - name: Patch Expo Packages for Swift 6.0 Compatibility
-        run: |
-          node scripts/patch-swift6.js
 
       - name: Expo Prebuild (Generate native iOS project)
         run: |
@@ -74,10 +69,6 @@ jobs:
           cd ios
           pod install || pod install --repo-update
           cd ..
-
-      - name: Re-apply Swift 6.0 Patches after Prebuild
-        run: |
-          node scripts/patch-swift6.js
 
       - name: Configure Xcode Project for Ad-Hoc Signing
         run: |
@@ -178,14 +169,15 @@ jobs:
           retention-days: 14
 
       - name: Create GitHub Release
-        if: startsWith(github.ref, 'refs/tags/') || github.event.inputs.create_release == 'true' || github.event.inputs.create_release == true
+        if: startsWith(github.ref, 'refs/tags/') || github.event.inputs.create_release == 'true' || github.event.inputs.create_release == true || github.ref == 'refs/heads/main'
+        continue-on-error: true
         uses: softprops/action-gh-release@v2
         with:
           files: |
             build/PhilipsRemote.ipa
             build/PhilipsRemote.ipa.sha256
-          name: ${{ github.ref_name || 'Philips Remote iOS Build' }}
-          tag_name: ${{ github.ref_name || 'v1.0.0' }}
+          name: ${{ github.ref_name || 'v1.0.0' }}
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'v1.0.0' }}
           draft: false
           prerelease: false
           body: |
