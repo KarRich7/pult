@@ -63,9 +63,7 @@ jobs:
 
       - name: Patch Expo Packages for Swift 6.0 Compatibility
         run: |
-          echo "Patching Package.swift manifests for Swift 6.0 compatibility..."
-          find node_modules -name "Package.swift*" -exec sed -i '' 's/swift-tools-version: 6.[12]/swift-tools-version: 6.0/g' {} + || true
-          find node_modules -name "Package.swift*" -exec sed -i '' '/enableUpcomingFeature/d' {} + || true
+          node scripts/patch-swift6.js
 
       - name: Expo Prebuild (Generate native iOS project)
         run: |
@@ -79,8 +77,7 @@ jobs:
 
       - name: Re-apply Swift 6.0 Patches after Prebuild
         run: |
-          find node_modules -name "Package.swift*" -exec sed -i '' 's/swift-tools-version: 6.[12]/swift-tools-version: 6.0/g' {} + || true
-          find node_modules -name "Package.swift*" -exec sed -i '' '/enableUpcomingFeature/d' {} + || true
+          node scripts/patch-swift6.js
 
       - name: Configure Xcode Project for Ad-Hoc Signing
         run: |
