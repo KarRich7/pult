@@ -72,11 +72,20 @@ jobs:
       - name: Build iOS App (.app)
         run: |
           WORKSPACE=$(find ios -name "*.xcworkspace" -maxdepth 1 | head -n 1)
+          PROJECT=$(find ios -name "*.xcodeproj" -maxdepth 1 | head -n 1)
           echo "Found workspace: $WORKSPACE"
+          echo "Found project: $PROJECT"
           
-          # Detect the main scheme
-          SCHEME=$(xcodebuild -workspace "$WORKSPACE" -list -json | jq -r '.workspace.schemes[0]')
-          echo "Selected scheme: $SCHEME"
+          # List all workspace schemes for visibility
+          echo "=== All Available Schemes ==="
+          xcodebuild -workspace "$WORKSPACE" -list
+          
+          # Get the main app scheme from the .xcodeproj (avoids selecting 'Pods-...' scheme)
+          SCHEME=$(xcodebuild -project "$PROJECT" -list -json | jq -r '.project.schemes[0]')
+          if [ -z "$SCHEME" ] || [ "$SCHEME" = "null" ]; then
+            SCHEME=$(xcodebuild -workspace "$WORKSPACE" -list -json | jq -r '[.workspace.schemes[] | select(startswith("Pods-") | not)][0]')
+          fi
+          echo "===> Selected Target App Scheme: $SCHEME <==="
 
           mkdir -p build/DerivedData
 
@@ -86,6 +95,7 @@ jobs:
             -configuration Release \
             -destination "generic/platform=iOS" \
             -derivedDataPath build/DerivedData \
+            COMPILER_INDEX_STORE_ENABLE=NO \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
@@ -94,7 +104,10 @@ jobs:
 
       - name: Package into IPA
         run: |
-          APP_DIR=$(find build/DerivedData/Build/Products/Release-iphoneos -name "*.app" -maxdepth 1 | head -n 1)
+          echo "=== Searching for .app bundles in build directory ==="
+          find build -name "*.app" -type d -ls || true
+
+          APP_DIR=$(find build -name "*.app" -type d | head -n 1)
           echo "Compiled app bundle: $APP_DIR"
           
           if [ -z "$APP_DIR" ]; then
