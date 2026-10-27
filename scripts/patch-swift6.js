@@ -26,5 +26,21 @@ function patchDirectory(dir) {
   }
 }
 
+// 1. Patch Package.swift manifests
 patchDirectory(path.join(__dirname, '..', 'node_modules'));
+
+// 2. Patch RuntimeScheduler.h for SWIFT_RETURNS_RETAINED compatibility with Swift 6.0 / Clang
+const schedulerHeader = path.join(__dirname, '..', 'node_modules', 'expo-modules-jsi', 'apple', 'Sources', 'ExpoModulesJSI-Cxx', 'include', 'RuntimeScheduler.h');
+if (fs.existsSync(schedulerHeader)) {
+  let headerContent = fs.readFileSync(schedulerHeader, 'utf8');
+  if (!headerContent.includes('#ifndef SWIFT_RETURNS_RETAINED')) {
+    headerContent = headerContent.replace(
+      '#include <swift/bridging>',
+      '#include <swift/bridging>\n\n#ifndef SWIFT_RETURNS_RETAINED\n#define SWIFT_RETURNS_RETAINED\n#endif'
+    );
+    fs.writeFileSync(schedulerHeader, headerContent, 'utf8');
+    console.log('Successfully patched RuntimeScheduler.h for Swift 6.0.');
+  }
+}
+
 console.log('Swift 6.0 compatibility patches applied successfully.');
