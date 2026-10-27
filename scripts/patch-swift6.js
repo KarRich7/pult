@@ -1,6 +1,8 @@
 const fs = require('fs');
 const path = require('path');
 
+const nodeModules = path.join(__dirname, '..', 'node_modules');
+
 function patchDirectory(dir) {
   if (!fs.existsSync(dir)) return;
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -12,12 +14,22 @@ function patchDirectory(dir) {
       const original = content;
       // 1. Lower swift-tools-version to 6.0
       content = content.replace(/swift-tools-version:\s*6\.[12]/g, 'swift-tools-version: 6.0');
-      // 2. Remove 6.2-only upcoming features
-      content = content.replace(/.*enableUpcomingFeature.*\n?/g, '');
-      // 3. Remove 6.2-only -Werror warning group flags
+      // 2. Remove 6.2-only -Werror warning group flags
       content = content.replace(/.*"-Werror",\s*"(ImplicitStrongCapture|NoUsage)".*\n?/g, '');
-      // 4. Remove trailing commas before closing parenthesis in function calls
+      // 3. Remove trailing commas before closing parenthesis in function calls
       content = content.replace(/,\s*\)/g, '\n)');
+      // 4. In expo-modules-jsi/apple/Package.swift, ensure required Swift 6.0 features are enabled
+      if (fullPath.includes('expo-modules-jsi') && fullPath.includes('Package.swift')) {
+        if (!content.includes('NonescapableTypes')) {
+          content = content.replace(
+            '.interoperabilityMode(.Cxx),',
+            `.interoperabilityMode(.Cxx),
+        .enableUpcomingFeature("NonisolatedNonsendingByDefault"),
+        .enableUpcomingFeature("InferIsolatedConformances"),
+        .enableExperimentalFeature("NonescapableTypes"),`
+          );
+        }
+      }
       if (content !== original) {
         fs.writeFileSync(fullPath, content, 'utf8');
         console.log('Successfully patched for Swift 6.0:', fullPath);
@@ -27,10 +39,10 @@ function patchDirectory(dir) {
 }
 
 // 1. Patch Package.swift manifests
-patchDirectory(path.join(__dirname, '..', 'node_modules'));
+patchDirectory(nodeModules);
 
 // 2. Patch RuntimeScheduler.h for SWIFT_RETURNS_RETAINED compatibility with Swift 6.0 / Clang
-const schedulerHeader = path.join(__dirname, '..', 'node_modules', 'expo-modules-jsi', 'apple', 'Sources', 'ExpoModulesJSI-Cxx', 'include', 'RuntimeScheduler.h');
+const schedulerHeader = path.join(nodeModules, 'expo-modules-jsi', 'apple', 'Sources', 'ExpoModulesJSI-Cxx', 'include', 'RuntimeScheduler.h');
 if (fs.existsSync(schedulerHeader)) {
   let headerContent = fs.readFileSync(schedulerHeader, 'utf8');
   if (!headerContent.includes('#ifndef SWIFT_RETURNS_RETAINED')) {
@@ -40,6 +52,20 @@ if (fs.existsSync(schedulerHeader)) {
     );
     fs.writeFileSync(schedulerHeader, headerContent, 'utf8');
     console.log('Successfully patched RuntimeScheduler.h for Swift 6.0.');
+  }
+}
+
+// 3. Patch JavaScriptError.swift to remove `public` member on C++ type extension
+const jsErrorSwift = path.join(nodeModules, 'expo-modules-jsi', 'apple', 'Sources', 'ExpoModulesJSI', 'Runtime', 'Values', 'JavaScriptError.swift');
+if (fs.existsSync(jsErrorSwift)) {
+  let errContent = fs.readFileSync(jsErrorSwift, 'utf8');
+  if (errContent.includes('public var message: String {')) {
+    errContent = errContent.replace(
+      'public var message: String {',
+      'var message: String {'
+    );
+    fs.writeFileSync(jsErrorSwift, errContent, 'utf8');
+    console.log('Successfully patched JavaScriptError.swift for Swift 6.0.');
   }
 }
 
