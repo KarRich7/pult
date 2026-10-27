@@ -34,8 +34,16 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: 'npm'
+
+      - name: Ensure Node in Xcode PATH
+        run: |
+          sudo mkdir -p /usr/local/bin
+          sudo ln -sf "$(which node)" /usr/local/bin/node || true
+          echo "NODE_BINARY=$(which node)" >> $GITHUB_ENV
+          echo "Node version: $(node -v)"
+          echo "Node path: $(which node)"
 
       - name: Select Xcode 16 / 15
         run: |
@@ -63,11 +71,18 @@ jobs:
           pod install || pod install --repo-update
           cd ..
 
-      - name: Configure Xcode Project for Unsigned Build
+      - name: Configure Xcode Project for Ad-Hoc Signing
         run: |
-          # Disable automatic signing requirements in project.pbxproj
+          # 1. Switch to Manual code signing and Ad-Hoc identity everywhere
           find ios -name "project.pbxproj" -exec sed -i '' 's/CODE_SIGN_STYLE = Automatic;/CODE_SIGN_STYLE = Manual;/g' {} + || true
-          find ios -name "project.pbxproj" -exec sed -i '' 's/CODE_SIGN_IDENTITY = "iPhone Developer";/CODE_SIGN_IDENTITY = "";/g' {} + || true
+          find ios -name "project.pbxproj" -exec sed -i '' 's/CODE_SIGN_IDENTITY = "iPhone Developer";/CODE_SIGN_IDENTITY = "-";/g' {} + || true
+          find ios -name "project.pbxproj" -exec sed -i '' 's/CODE_SIGN_IDENTITY = "Apple Development";/CODE_SIGN_IDENTITY = "-";/g' {} + || true
+          find ios -name "project.pbxproj" -exec sed -i '' 's/DEVELOPMENT_TEAM = [^;]*;/DEVELOPMENT_TEAM = "";/g' {} + || true
+          find ios -name "project.pbxproj" -exec sed -i '' 's/PROVISIONING_PROFILE_SPECIFIER = [^;]*;/PROVISIONING_PROFILE_SPECIFIER = "";/g' {} + || true
+          find ios -name "project.pbxproj" -exec sed -i '' 's/CODE_SIGNING_REQUIRED = YES;/CODE_SIGNING_REQUIRED = NO;/g' {} + || true
+
+          # 2. Prevent Xcode from building test bundles during the release build
+          find ios -name "*.xcscheme" -exec sed -i '' 's/buildForTesting = "YES"/buildForTesting = "NO"/g' {} + || true
 
       - name: Build iOS App (.app)
         run: |
@@ -76,11 +91,11 @@ jobs:
           echo "Found workspace: $WORKSPACE"
           echo "Found project: $PROJECT"
           
-          # List all workspace schemes for visibility
+          # List all workspace schemes
           echo "=== All Available Schemes ==="
           xcodebuild -workspace "$WORKSPACE" -list
           
-          # Get the main app scheme from the .xcodeproj (avoids selecting 'Pods-...' scheme)
+          # Get the main app scheme from the .xcodeproj
           SCHEME=$(xcodebuild -project "$PROJECT" -list -json | jq -r '.project.schemes[0]')
           if [ -z "$SCHEME" ] || [ "$SCHEME" = "null" ]; then
             SCHEME=$(xcodebuild -workspace "$WORKSPACE" -list -json | jq -r '[.workspace.schemes[] | select(startswith("Pods-") | not)][0]')
@@ -89,6 +104,7 @@ jobs:
 
           mkdir -p build/DerivedData
 
+          set -o pipefail
           xcodebuild \
             -workspace "$WORKSPACE" \
             -scheme "$SCHEME" \
@@ -96,18 +112,28 @@ jobs:
             -destination "generic/platform=iOS" \
             -derivedDataPath build/DerivedData \
             COMPILER_INDEX_STORE_ENABLE=NO \
-            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGN_IDENTITY="-" \
             CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_ALLOWED=YES \
+            AD_HOC_CODE_SIGNING_ALLOWED=YES \
             CODE_SIGN_STYLE=Manual \
-            build
+            PROVISIONING_PROFILE_SPECIFIER="" \
+            PROVISIONING_PROFILE="" \
+            build 2>&1 | tee build/xcodebuild.log || {
+              echo "==================== XCODEBUILD FAILED ===================="
+              tail -n 150 build/xcodebuild.log
+              exit 1
+            }
 
       - name: Package into IPA
         run: |
           echo "=== Searching for .app bundles in build directory ==="
           find build -name "*.app" -type d -ls || true
 
-          APP_DIR=$(find build -name "*.app" -type d | head -n 1)
+          APP_DIR=$(find build/DerivedData/Build/Products -name "*.app" -type d | head -n 1)
+          if [ -z "$APP_DIR" ]; then
+            APP_DIR=$(find build -name "*.app" -type d | head -n 1)
+          fi
           echo "Compiled app bundle: $APP_DIR"
           
           if [ -z "$APP_DIR" ]; then
@@ -125,6 +151,14 @@ jobs:
           ls -lh PhilipsRemote.ipa
           cat PhilipsRemote.ipa.sha256
           cd ..
+
+      - name: Upload Build Log on Failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Xcodebuild-Log
+          path: build/xcodebuild.log
+          retention-days: 7
 
       - name: Upload IPA to GitHub Artifacts
         uses: actions/upload-artifact@v4
