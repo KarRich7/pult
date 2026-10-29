@@ -1,203 +1,344 @@
-# 📋 Шпаргалка: Подготовка и сборка iOS-приложения без ошибок
+# 📱 Универсальная шпаргалка: Сборка любого Expo / React Native проекта в iOS IPA через GitHub Actions
 
-Полное пошаговое руководство по подготовке, проверке и сборке приложения **Philips Remote** (Expo SDK 58 / React Native 0.88) в файл `.ipa` через **GitHub Actions** без ошибок.
-
----
-
-## 🧭 Экспресс-чеклист перед сборкой
-
-Выполните эти 4 шага в терминале перед отправкой кода в GitHub:
-
-```bash
-# 1. Проверить совместимость всех библиотек с версией Expo SDK
-npx expo-doctor
-
-# 2. Если есть конфликты версий — автоматически исправить их
-npx expo install --fix
-
-# 3. Убедиться, что проект запускается и нет ошибок компиляции JS
-npx expo start -c
-
-# 4. Проверить статус Git (нет ли мусорных файлов)
-git status
-```
+> **Для чего этот документ:**  
+> Этот файл можно скопировать в **любой** проект на Expo / React Native. Любой разработчик или нейросеть (AI-ассистент), прочитав этот документ, сможет с нуля настроить и запустить гарантированно рабочую сборку автономного файла `.ipa` для iPhone без платного аккаунта Apple Developer ($99/год) и без необходимости иметь компьютер Mac.
 
 ---
 
-## ⚙️ 1. Управление зависимостями: золотые правила Expo
+## ⚡ Экспресс-инструкция по запуску в новом проекте (За 3 шага)
 
-В проектах на Expo нельзя устанавливать системные модули через обычный `npm install <пакет>`, так как npm может поставить версию пакета, несовместимую с текущим движком Expo и React Native.
+Если вы только что скопировали этот файл в новый проект, вот что нужно сделать:
 
-### ✅ Как правильно:
-- **Установка пакетов:**
+1. **Проверьте зависимости проекта в терминале:**
+   ```bash
+   npx expo-doctor
+   npx expo install --fix
+   ```
+2. **Убедитесь, что в `app.json` указан `bundleIdentifier`:**
+   ```json
+   "ios": {
+     "supportsTablet": true,
+     "bundleIdentifier": "com.yourname.yourapp"
+   }
+   ```
+3. **Создайте файл `.github/workflows/build-ios.yml`** и вставьте в него [готовый код workflow](#-2-готовый-универсальный-файл-github-actions-workflow) из Раздела 2 этого документа.
+4. **Отправьте изменения на GitHub:**
+   ```bash
+   git add .
+   git commit -m "ci: add iOS IPA build workflow"
+   git push origin main
+   ```
+Сборка начнется автоматически во вкладке **Actions** на GitHub и выдаст готовый `.ipa`!
+
+---
+
+## 📦 1. Подготовка конфигурации проекта (`app.json` и зависимости)
+
+### А. Управление зависимостями (Золотые правила Expo)
+В проектах Expo системные модули должны строго соответствовать установленной версии Expo SDK:
+
+- **Никогда не используйте обычный `npm install <native-lib>` для нативных библиотек.**  
+  Всегда используйте официальный установщик Expo:
   ```bash
-  npx expo install <название-пакета>
+  npx expo install <название-библиотеки>
   ```
-  *Пример:* `npx expo install expo-haptics`  
-  *Expo сам подберет точную версию, протестированную с вашей версией Expo SDK.*
-
-- **Исправление несовместимых версий:**
+  *Пример:* `npx expo install expo-haptics expo-linear-gradient`
+- **Проверка совместимости версий:**
+  ```bash
+  npx expo-doctor
+  ```
+  *Команда проверяет 20+ параметров проекта. Если есть предупреждения о версиях — выполните команду ниже.*
+- **Автоматическое исправление всех версий под текущий SDK:**
   ```bash
   npx expo install --fix
   ```
 
-- **Глубокая диагностика проекта:**
-  ```bash
-  npx expo-doctor
-  ```
-  *Результат должен быть: `20/20 checks passed. No issues detected!`*
-
-> [!TIP]
-> Если проект ведет себя странно после обновления пакетов, очистите кэш Metro bundler:
-> ```bash
-> npx expo start -c
-> ```
-
 ---
 
-## 🛠 2. Настройка `app.json` (Параметры iOS)
-
-Файл [`app.json`](file:///c:/Users/vysot/Документы/ChatGPT/TV/ПУЛЬТ/app.json) является единым источником конфигурации для генерации нативного проекта iOS (`expo prebuild`).
-
-Перед сборкой убедитесь в наличии следующих критически важных параметров:
+### Б. Обязательные поля в `app.json`
+Файл `app.json` — это единственный источник правды для генератора нативного iOS-проекта (`expo prebuild`). Убедитесь, что блок `"ios"` содержит следующие настройки:
 
 ```json
 {
   "expo": {
-    "name": "Philips Remote 46PFL8606H",
-    "slug": "philips-remote",
+    "name": "Название Приложения",
+    "slug": "app-slug",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.philips.remote8606",
+      "bundleIdentifier": "com.yourcompany.yourapp",
       "infoPlist": {
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true,
           "NSAllowsLocalNetworking": true
         },
-        "NSLocalNetworkUsageDescription": "Приложению требуется доступ к локальной сети Wi-Fi для обнаружения и управления телевизором Philips Smart TV."
+        "NSLocalNetworkUsageDescription": "Описание, зачем приложению доступ к Wi-Fi / локальной сети (если нужно)."
       }
     }
   }
 }
 ```
 
-### На что обратить внимание:
-1. **`bundleIdentifier`**: Уникальный идентификатор приложения (например, `com.philips.remote8606`). Не должен содержать пробелов и спецсимволов.
-2. **`NSLocalNetworkUsageDescription`**: Обязательное описание в iOS для доступа к локальной сети. Без него iOS заблокирует отправку HTTP-запросов к телевизору или отклонит запуск.
-3. **Иконка (`icon`)**: Файл [`assets/icon.png`](file:///c:/Users/vysot/Документы/ChatGPT/TV/ПУЛЬТ/assets/icon.png) должен существовать и иметь размер 1024x1024 px (PNG без прозрачности для App Store, либо с альфа-каналом для ad-hoc).
+> [!IMPORTANT]
+> - `bundleIdentifier` обязателен! Без него Xcode не сможет скомпилировать проект. Формат: `com.company.appname` (только латинские буквы, точки и цифры, без пробелов).
+> - Файл иконки `./assets/icon.png` должен физически существовать в проекте (квадратный PNG, желательно 1024x1024).
 
 ---
 
-## 🚀 3. Как устроена сборка в GitHub Actions
+## 🚀 2. Готовый универсальный файл GitHub Actions Workflow
 
-Сборка происходит автоматически в облаке GitHub Actions по сценарию [`.github/workflows/build-ios.yml`](file:///c:/Users/vysot/Документы/ChatGPT/TV/ПУЛЬТ/.github/workflows/build-ios.yml).
+Создайте в корне проекта файл по пути `.github/workflows/build-ios.yml` и скопируйте в него следующий код.
 
-### Главные причины прошлых ошибок и как они решены:
+Этот workflow:
+- Автоматически находит актуальную версию Xcode на раннере `macos-15` (подходит для любых версий Expo, включая Expo 51, 52, 53, 58+).
+- Сам определяет имя схемы (`scheme`) и рабочего пространства (`workspace`) без жесткой привязки к конкретному проекту.
+- Настраивает проект в режим **Ad-Hoc / Manual signing**, исключая ошибки отсутствия сертификатов разработчика Apple.
+- Пакует скомпилированный бандл `.app` в финальный архив `.ipa` с вычислением SHA256.
+- Сохраняет `.ipa` в артефакты сборки и автоматически создает релиз в **GitHub Releases**.
 
-| Проблема | Причина | Правильное решение |
+```yaml
+name: Build iOS IPA
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths-ignore:
+      - '**.md'
+      - '.gitignore'
+      - 'LICENSE'
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      create_release:
+        description: 'Publish as GitHub Release?'
+        required: false
+        type: boolean
+        default: true
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-ipa:
+    name: Build Unsigned IPA
+    runs-on: macos-15
+    timeout-minutes: 45
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Ensure Node in Xcode PATH
+        run: |
+          sudo mkdir -p /usr/local/bin
+          sudo ln -sf "$(which node)" /usr/local/bin/node || true
+          echo "NODE_BINARY=$(which node)" >> $GITHUB_ENV
+          echo "Node version: $(node -v)"
+          echo "Node path: $(which node)"
+
+      - name: Select Latest Xcode
+        run: |
+          echo "=== Available Xcode versions in /Applications ==="
+          ls -ld /Applications/Xcode* || true
+
+          # Автоматически выбираем наивысшую доступную версию Xcode
+          LATEST_XCODE=$(find /Applications -maxdepth 1 -name "Xcode*.app" | sort -V | tail -n 1)
+          if [ -n "$LATEST_XCODE" ]; then
+            echo "Selecting highest Xcode: $LATEST_XCODE"
+            sudo xcode-select -s "$LATEST_XCODE"
+          fi
+          xcodebuild -version
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Expo Prebuild (Generate native iOS project)
+        run: |
+          npx expo prebuild --platform ios --clean
+
+      - name: Ensure CocoaPods Dependencies
+        run: |
+          cd ios
+          pod install || pod install --repo-update
+          cd ..
+
+      - name: Configure Xcode Project for Ad-Hoc Signing
+        run: |
+          # Переключаем подписание в Ad-Hoc режим для установки через AltStore / Sideloadly / TrollStore
+          find ios -name "project.pbxproj" -exec sed -i '' 's/CODE_SIGN_STYLE = Automatic;/CODE_SIGN_STYLE = Manual;/g' {} + || true
+          find ios -name "project.pbxproj" -exec sed -i '' 's/CODE_SIGN_IDENTITY = "iPhone Developer";/CODE_SIGN_IDENTITY = "-";/g' {} + || true
+          find ios -name "project.pbxproj" -exec sed -i '' 's/CODE_SIGN_IDENTITY = "Apple Development";/CODE_SIGN_IDENTITY = "-";/g' {} + || true
+          find ios -name "project.pbxproj" -exec sed -i '' 's/DEVELOPMENT_TEAM = [^;]*;/DEVELOPMENT_TEAM = "";/g' {} + || true
+          find ios -name "project.pbxproj" -exec sed -i '' 's/PROVISIONING_PROFILE_SPECIFIER = [^;]*;/PROVISIONING_PROFILE_SPECIFIER = "";/g' {} + || true
+          find ios -name "project.pbxproj" -exec sed -i '' 's/CODE_SIGNING_REQUIRED = YES;/CODE_SIGNING_REQUIRED = NO;/g' {} + || true
+
+          # Отключаем компиляцию тестов во время релизной сборки
+          find ios -name "*.xcscheme" -exec sed -i '' 's/buildForTesting = "YES"/buildForTesting = "NO"/g' {} + || true
+
+      - name: Build iOS App (.app)
+        run: |
+          WORKSPACE=$(find ios -name "*.xcworkspace" -maxdepth 1 | head -n 1)
+          PROJECT=$(find ios -name "*.xcodeproj" -maxdepth 1 | head -n 1)
+          echo "Found workspace: $WORKSPACE"
+          echo "Found project: $PROJECT"
+          
+          # Автоматическое определение главной схемы приложения
+          SCHEME=$(xcodebuild -project "$PROJECT" -list -json | jq -r '.project.schemes[0]')
+          if [ -z "$SCHEME" ] || [ "$SCHEME" = "null" ]; then
+            SCHEME=$(xcodebuild -workspace "$WORKSPACE" -list -json | jq -r '[.workspace.schemes[] | select(startswith("Pods-") | not)][0]')
+          fi
+          echo "===> Selected Target App Scheme: $SCHEME <==="
+
+          mkdir -p build/DerivedData
+
+          set -o pipefail
+          xcodebuild \
+            -workspace "$WORKSPACE" \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -destination "generic/platform=iOS" \
+            -derivedDataPath build/DerivedData \
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=YES \
+            AD_HOC_CODE_SIGNING_ALLOWED=YES \
+            CODE_SIGN_STYLE=Manual \
+            PROVISIONING_PROFILE_SPECIFIER="" \
+            PROVISIONING_PROFILE="" \
+            build 2>&1 | tee build/xcodebuild.log || {
+              echo "==================== XCODEBUILD FAILED ===================="
+              tail -n 150 build/xcodebuild.log
+              exit 1
+            }
+
+      - name: Package into IPA
+        run: |
+          echo "=== Searching for .app bundles in build directory ==="
+          find build -name "*.app" -type d -ls || true
+
+          APP_DIR=$(find build/DerivedData/Build/Products -name "*.app" -type d | head -n 1)
+          if [ -z "$APP_DIR" ]; then
+            APP_DIR=$(find build -name "*.app" -type d | head -n 1)
+          fi
+          echo "Compiled app bundle: $APP_DIR"
+          
+          if [ -z "$APP_DIR" ]; then
+            echo "Error: .app bundle not found!"
+            exit 1
+          fi
+
+          mkdir -p build/Payload
+          cp -R "$APP_DIR" build/Payload/
+          
+          cd build
+          zip -r -q "Application.ipa" Payload
+          shasum -a 256 "Application.ipa" > "Application.ipa.sha256"
+          echo "Created Application.ipa successfully."
+          ls -lh Application.ipa
+          cat Application.ipa.sha256
+          cd ..
+
+      - name: Upload Build Log on Failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Xcodebuild-Log
+          path: build/xcodebuild.log
+          retention-days: 7
+
+      - name: Upload IPA to GitHub Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: iOS-IPA-Bundle
+          path: |
+            build/Application.ipa
+            build/Application.ipa.sha256
+          retention-days: 14
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/') || github.event.inputs.create_release == 'true' || github.event.inputs.create_release == true || github.ref == 'refs/heads/main'
+        continue-on-error: true
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            build/Application.ipa
+            build/Application.ipa.sha256
+          name: ${{ github.ref_name || 'v1.0.0' }}
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'v1.0.0' }}
+          draft: false
+          prerelease: false
+          body: |
+            ### 📱 iOS IPA Application Build
+            
+            Автономная Ad-Hoc сборка приложения для iPhone / iPad.
+            
+            **Установка на устройство:**
+            - **TrollStore:** Устанавливается напрямую в 1 клик (без ограничений по сертификатам).
+            - **AltStore / Sideloadly / Scarlet / ESign:** Скачайте файл `.ipa` и установите через компьютер или приложение на телефоне (программа автоматически подпишет приложение вашим бесплатным Apple ID).
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+```
+
+---
+
+## 🔍 3. Главные подводные камни (Почему обычно падают сборки)
+
+### 1. Ошибка несовместимости версий Xcode и Expo SDK
+```text
+error: failed to build module 'ExpoModulesCore'; this SDK is not supported by the compiler
+(the SDK is built with 'Apple Swift version 6.3.1', while this compiler is 'Apple Swift version 6.0.3').
+Please select a toolchain which matches the SDK.
+```
+- **Почему возникает:** Новые версии Expo (начиная с SDK 52/53/58) поставляют предсобранные бинарники (`ExpoModulesCore.xcframework`), скомпилированные актуальной версией Swift/Xcode. Если в GitHub Actions запустить старый раннер `macos-14` с `Xcode 16.2`, компилятор Swift физически не сможет прочитать интерфейсы модулей.
+- **Как избежать:** Всегда ставить `runs-on: macos-15` (или новее) и выбирать новейший доступный Xcode.
+
+### 2. Ошибки попытки ручной модификации исходников Expo (`patch-swift...`)
+- **Почему возникает:** Разработчики часто пытаются решить ошибку выше написанием скриптов на `sed` или `node`, понижающих `swift-tools-version: 6.0` в `Package.swift`. Это ломает безопасность акторов, генерирует ошибки типов `converting non-escaping parameter to generic parameter may allow it to escape` и делает проект несобираемым.
+- **Как избежать:** Никаких ручных патчей библиотек Expo не требуется, если используется правильная версия Xcode на раннере.
+
+### 3. Ошибки подписи кода (Signing / Provisioning Profile)
+```text
+Code signing is required for product type 'Application' in SDK 'iOS'
+No profile for team 'XXXXX' matching 'YYYYY' found
+```
+- **Почему возникает:** По умолчанию Xcode пытается подписать приложение через платный Apple Developer аккаунт.
+- **Как избежать:** В шаге `Configure Xcode Project for Ad-Hoc Signing` мы принудительно переключаем проект на Ad-Hoc подпись (`CODE_SIGN_IDENTITY="-"`, `CODE_SIGNING_REQUIRED=NO`). Итоговый `.ipa` подписывается при установке бесплатным Apple ID через Sideloadly или ставится напрямую через TrollStore.
+
+---
+
+## 📲 4. Установка готового `.ipa` на iPhone
+
+Готовый файл скачивается со страницы **Releases** (или из блока **Artifacts** завершенной сборки):
+
+| Метод установки | Требования к iOS | Как ставить |
 | :--- | :--- | :--- |
-| `error: failed to build module 'ExpoModulesCore'; this SDK is not supported by the compiler` | В Expo 58 предсобранные бинарники скомпилированы под **Swift 6.3.1 (Xcode 26)**. Попытка сборки в устаревшем Xcode 16.2 (`macos-14`) вызывает отказ компилятора. | Использовать раннер **`runs-on: macos-15`** и динамический выбор актуальной версии **Xcode 26.x**. |
-| `converting non-escaping parameter 'operation' to generic parameter 'T'` | Ручные патчи (`patch-swift6.js`) пытались переписать исходный Swift-код Expo, ломая безопасность акторов и типов. | **Не патчить исходники Expo.** В родной среде Xcode 26 код компилируется без изменений. |
-| Ошибки сертификатов Apple (`Signing Failed`) | У большинства пользователей нет платного аккаунта разработчика Apple Developer Program ($99/год). | Использовать **Ad-Hoc / Unsigned** конфигурацию (`CODE_SIGN_IDENTITY="-"`, `CODE_SIGNING_REQUIRED=NO`). Приложение подписывается на стороне пользователя при установке (AltStore / Sideloadly). |
-
-### Этапы сборки в GitHub Actions:
-1. **Подготовка раннера:** `macos-15` с выбором новейшего Xcode.
-2. **Установка зависимостей:** `npm ci`.
-3. **Expo Prebuild:** `npx expo prebuild --platform ios --clean` (генерация нативной папки `ios/`).
-4. **CocoaPods:** `pod install` (линковка нативных библиотек).
-5. **Ad-Hoc подпись:** Переключение `project.pbxproj` в режим Manual Ad-Hoc.
-6. **Компиляция Xcode:** `xcodebuild -configuration Release`.
-7. **Упаковка:** Формирование структуры `Payload/PhilipsRemote.app` и сжатие в `PhilipsRemote.ipa`.
-8. **Публикация:** Загрузка артефакта и прикрепление к [GitHub Releases](https://github.com/KarRich7/pult/releases).
+| **TrollStore** | iOS 14.0 – 16.6.1 / 17.0 | Открыть файл `.ipa` на телефоне через кнопку «Поделиться» -> TrollStore. Устанавливается мгновенно, работает вечно без переподписания. |
+| **Sideloadly** | Любая версия iOS | Установить Sideloadly на ПК (Windows/Mac) -> подключить iPhone проводом -> перетащить `.ipa` -> ввести бесплатный Apple ID -> нажать Start. |
+| **AltStore** | Любая версия iOS | Установить AltServer на ПК -> установить AltStore на телефон -> открывать `.ipa` прямо на телефоне с авто-обновлением по Wi-Fi. |
+| **Scarlet / ESign** | Любая версия iOS | Прямая установка прямо с телефона при наличии действующего корпоративного или личного сертификата. |
 
 ---
 
-## 🔄 4. Пошаговый процесс обновления и повторной сборки
+## 📋 5. Чек-лист перед каждым коммитом в репозиторий
 
-Когда вы внесли изменения в код (например, добавили новые кнопки или изменили стили):
-
-### Шаг 1. Тестирование изменений локально
-```bash
-# Запустите проект и проверьте в браузере или на телефоне
-npx expo start
-```
-
-### Шаг 2. Проверка здоровья проекта
-```bash
-npx expo-doctor
-```
-
-### Шаг 3. Фиксация и отправка изменений на GitHub
-```bash
-# Добавить измененные файлы
-git add .
-
-# Создать коммит с понятным описанием
-git commit -m "feat: добавил новые функции и обновил интерфейс"
-
-# Отправить в репозиторий на GitHub
-git push origin main
-```
-
-### Шаг 4. Контроль сборки
-1. Откройте страницу репозитория: [https://github.com/KarRich7/pult/actions](https://github.com/KarRich7/pult/actions).
-2. Вы увидите запущенную сборку **«Build iOS IPA»**.
-3. Нажмите на неё, чтобы наблюдать за шагами компиляции в реальном времени.
-4. Обычное время сборки: **~5–7 минут**.
-
----
-
-## 📲 5. Как скачать и установить готовый `.ipa` на iPhone
-
-После успешного завершения сборки:
-
-1. Перейдите во вкладку [Releases](https://github.com/KarRich7/pult/releases) (или в блок *Artifacts* завершенного workflow).
-2. Скачайте файл **`PhilipsRemote.ipa`**.
-
-### Способы установки:
-
-### Вариант A. TrollStore (iOS 14.0 – 16.6.1 / 17.0) — Самый простой
-- Отправьте `.ipa` на iPhone (через AirDrop, Telegram, iCloud Drive).
-- Нажмите «Поделиться» -> выберите **TrollStore**.
-- Приложение установится мгновенно и будет работать **бессрочно без переподписания**.
-
-### Вариант B. Sideloadly (ПК на Windows / Mac) — Для всех версий iOS
-1. Скачайте и установите **Sideloadly** на компьютер.
-2. Подключите iPhone к компьютеру через USB-кабель.
-3. Перетащите скачанный `PhilipsRemote.ipa` в окно Sideloadly.
-4. Введите ваш Apple ID (пароль передается напрямую на сервера Apple).
-5. Нажмите **Start**. Через минуту приложение появится на экране iPhone.
-6. На телефоне перейдите в:  
-   *Настройки -> Основные -> VPN и управление устройством* -> выберите ваш Apple ID и нажмите **«Доверять»**.
-
-### Вариант C. AltStore / Scarlet / ESign
-- Поддерживается прямая установка и автоматическое беспроводное переподписание по Wi-Fi.
-
----
-
-## 🆘 6. Решение возможных проблем (Troubleshooting)
-
-### Ошибка 1: `npm error code ERESOLVE` при установке пакетов
-- **Причина:** Конфликт версий зависимостей.
-- **Решение:**
-  ```bash
-  npm cache clean --force
-  npx expo install --fix
-  ```
-
-### Ошибка 2: Приложение не видит телевизор в сети Wi-Fi
-- **Причина 1:** Телевизор и iPhone находятся в разных подсетях (например, iPhone на 5 GHz, а ТВ на 2.4 GHz с изоляцией клиентов AP Isolation).
-  - *Решение:* Отключите «Изоляцию клиентов» (Client Isolation) в настройках роутера.
-- **Причина 2:** На телевизоре не активирован JointSpace.
-  - *Решение:* На физическом пульте ТВ быстро наберите цифры `5 6 4 6 8 7 7 2 2 3`. На экране должно появиться подтверждение `JointSpace enabled`.
-
-### Ошибка 3: `xcodebuild failed` в GitHub Actions
-- **Что делать:**
-  1. В упавшем запуске Actions откройте блок **Artifacts** внизу страницы.
-  2. Скачайте архив **`Xcodebuild-Log`**.
-  3. Откройте `xcodebuild.log` и найдите строки со словом `error:`.
-  4. 99% ошибок связаны либо с несовместимостью версии Swift/Xcode, либо с опечатками в коде/импортах JavaScript.
+Перед тем как отправить код в репозиторий:
+- [ ] Запущен `npx expo-doctor` и результат: `All checks passed!`
+- [ ] В `app.json` прописан корректный `bundleIdentifier`.
+- [ ] Приложение запускается локально командой `npx expo start -c` без фатальных ошибок JavaScript.
+- [ ] Все временные файлы или тяжелые логи удалены или добавлены в `.gitignore`.
