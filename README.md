@@ -63,6 +63,8 @@
 
 ## 📦 Сборка автономного файла IPA для iPhone
 
+> 📖 **Подробная шпаргалка по подготовке и сборке без ошибок:** см. [BUILD_CHEAT_SHEET.md](file:///c:/Users/vysot/%D0%94%D0%BE%D0%BA%D1%83%D0%BC%D0%B5%D0%BD%D1%82%D1%8B/ChatGPT/TV/%D0%9F%D0%A3%D0%9B%D0%AC%D0%A2/BUILD_CHEAT_SHEET.md).
+
 ### Способ 1: Автоматическая сборка в GitHub Actions (Рекомендуется)
 
 В репозитории настроен автоматический CI/CD workflow (`.github/workflows/build-ios.yml`), который собирает `.ipa` на серверах Apple Silicon macOS в GitHub Actions:
